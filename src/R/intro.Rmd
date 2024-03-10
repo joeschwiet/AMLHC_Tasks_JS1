@@ -1,0 +1,28 @@
+---
+title: "Task 1.1 Introduction"
+author: "Johannes Schwietering"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Introduction
+This is a test R-Markdown Notebook. Lets try to create a code chunk with a function that returns my name
+
+
+```{r}
+
+# This function `sayHello` takes a single parameter `name` and returns a greeting string.
+# It joins the word "Hello," with the provided `name` using the `paste` function.
+# The result is a friendly greeting directed to the specified individual.
+
+sayHello <- function(name) {
+  return(paste("Hello,", name))
+}
+
+```
+
+
+```{r}
+sayHello("Johannes")
+```
