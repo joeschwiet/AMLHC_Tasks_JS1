@@ -1,0 +1,73 @@
+---
+title: "Task 2.1 Unsupervised preprocessing and visualization"
+author: "Johannes Schwietering"
+date: "2024-04-05"
+output: html_document
+---
+Load dataset food.csv
+
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+
+root.dir = "/Users/johannesschwietering/Library/Mobile Documents/com~apple~CloudDocs/Studium/UMIT/Modul 12/AMLHC_Tasks_JS1"
+
+# Load dataset food.csv
+food_data <- read.csv("food.csv", header = TRUE, sep = ",")
+
+```
+
+## Get an overview by analyzing dimension, number of missing values and feature scaling
+
+
+```{r overview}
+# Analyze the dimensions of the dataset
+dim_food_data <- dim(food_data) # Gets the dimensions of the data frame
+cat("Dimensions of dataset: ", dim_food_data, "\n") # Prints out the dimensions
+
+# Calculate the number of missing values in the dataset
+num_missing_values <- sum(is.na(food_data)) # Counts the total number of NA values
+cat("Number of missing values: ", num_missing_values, "\n") # Prints out the number of missing values
+
+```
+
+The results show that we have a dataframe with 25 rows and 10 columns. We ha no missing values. Die Z-Transformation hat funktioniert: Der Mittelwert ist für alle Featuers 0. Jetzt können wir die einzelnen Features sinnvoll miteinander vergleichen. 
+
+
+## Preprocess data using z-transformation (R function scale)
+
+```{r pressure}
+# Feature scaling using z-transformation (standardization)
+scaled_food_data <- scale(food_data[,-1])
+
+# To check the scaling, let's look at the summary of the first few features
+# This gives the mean and standard deviation which should be 0 and 1, respectively, after scaling
+summary_scaled_food_data <- summary(scaled_food_data) 
+print(summary_scaled_food_data) # Prints a summary statistics of the scaled data
+```
+
+## Perform a principal component analysis (R function princomp)
+
+```{r principal component analysis}
+# Perform PCA using the princomp function
+pca_result <- princomp(scaled_food_data)
+
+# Print a summary of the PCA results to get eigenvalues and the proportion of variance
+summary(pca_result)
+
+# View the loadings for the PCA components
+loadings(pca_result)
+
+# Eigenvalues can give us the variance explained by each principal component
+pca_result$sdev^2
+
+# To see the proportion of variance explained by the principal components
+prop_var_explained <- pca_result$sdev^2 / sum(pca_result$sdev^2)
+prop_var_explained
+```
+
+
+Create a score plot using PC1 and PC2 (R function qplot)
+Update your git-repository. 
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
