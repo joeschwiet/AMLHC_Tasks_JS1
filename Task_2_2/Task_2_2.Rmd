@@ -1,0 +1,93 @@
+---
+title: "Task_2_2"
+author: "Johannes Schwietering"
+date: "2024-04-05"
+output: html_document
+---
+
+## Load dataset diabetes.csv
+
+```{r load dataset}
+diabetes_data <- read.csv("diabetes.csv", header = TRUE, sep = ",")
+# install.packages("Hmisc")
+# install.packages("htmltools")
+# install.packages("FSelector")
+# install.packages("rJava")
+library(rJava)
+library(FSelector)
+library(Hmisc)
+.jcall("java/lang/System", "S", "getProperty", "java.runtime.version")
+```
+
+## Define and apply a function for IQR based outlier detection 
+
+```{r outlier}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Replace zeros with NAs for all numeric columns
+diabetes_data[sapply(diabetes_data, is.numeric)] <- lapply(diabetes_data[sapply(diabetes_data, is.numeric)], function(x) replace(x, x == 0, NA))
+
+# Update the detect_outliers function to replace outliers with NA
+replace_outliers_with_NA <- function(x) {
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  x[x < lower_bound | x > upper_bound] <- NA
+  return(x)
+}
+
+# Apply the function to replace outliers with NA in each numeric column
+diabetes_data[sapply(diabetes_data, is.numeric)] <- lapply(diabetes_data[sapply(diabetes_data, is.numeric)], replace_outliers_with_NA)
+
+# Now, select only the complete cases
+diabetes_complete <- diabetes_data[complete.cases(diabetes_data), ]
+
+# [Optional: Describe single features (R function describe of package Hmisc)]
+description <- describe(diabetes_complete)
+print(description)
+
+# Rank features using information gain (package FSelector)
+
+## Calculate information gain for each feature
+info_gain <- information.gain(class ~ ., diabetes_complete)
+
+## Print the information gain values
+print(info_gain)
+
+## Rank the features by information gain
+ranked_features <- as.data.frame(info_gain)
+ranked_features <- ranked_features[order(-ranked_features$attr_importance), ]
+
+## View the ranked features by information gain
+print(ranked_features)
+
+# Create boxplot and distribution plots of one discriminating (i.e., highest IG score) and one non-discriminating feature (i.e., smallest IG score)
+
+```
+
+#
+
+```{r Replace}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#
+
+```{r features}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#
+
+```{r Rank}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#
+
+```{r boxplot}
+knitr::opts_chunk$set(echo = TRUE)
+```
