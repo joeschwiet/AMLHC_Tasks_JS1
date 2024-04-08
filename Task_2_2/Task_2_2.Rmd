@@ -7,16 +7,17 @@ output: html_document
 
 ## Load dataset diabetes.csv
 
-```{r load dataset}
+```{r load dataset, echo = TRUE, results = "hide"}
 diabetes_data <- read.csv("diabetes.csv", header = TRUE, sep = ",")
-# install.packages("Hmisc")
-# install.packages("htmltools")
-# install.packages("FSelector")
-# install.packages("rJava")
+ #install.packages("Hmisc")
+ #install.packages("htmltools")
+ #install.packages("FSelector")
+ #install.packages("rJava")
+library(Hmisc)
 library(rJava)
 library(FSelector)
-library(Hmisc)
-.jcall("java/lang/System", "S", "getProperty", "java.runtime.version")
+library(ggplot2)
+
 ```
 
 ## Define and apply a function for IQR based outlier detection 
@@ -27,7 +28,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Replace zeros with NAs for all numeric columns
 diabetes_data[sapply(diabetes_data, is.numeric)] <- lapply(diabetes_data[sapply(diabetes_data, is.numeric)], function(x) replace(x, x == 0, NA))
 
-# Update the detect_outliers function to replace outliers with NA
+# Define and apply a function for IQR based outlier detection and replace the detected outliers function to replace outliers with NA
 replace_outliers_with_NA <- function(x) {
   Q1 <- quantile(x, 0.25, na.rm = TRUE)
   Q3 <- quantile(x, 0.75, na.rm = TRUE)
@@ -45,49 +46,62 @@ diabetes_data[sapply(diabetes_data, is.numeric)] <- lapply(diabetes_data[sapply(
 # Now, select only the complete cases
 diabetes_complete <- diabetes_data[complete.cases(diabetes_data), ]
 
+str(diabetes_complete)
+
 # [Optional: Describe single features (R function describe of package Hmisc)]
 description <- describe(diabetes_complete)
 print(description)
 
 # Rank features using information gain (package FSelector)
+## Convert the class variable to a factor
+diabetes_complete$class <- as.factor(diabetes_complete$class)
 
 ## Calculate information gain for each feature
 info_gain <- information.gain(class ~ ., diabetes_complete)
 
-## Print the information gain values
-print(info_gain)
+# Convert the results into a readable data frame format
+info_gain_df <- as.data.frame(info_gain)
 
-## Rank the features by information gain
-ranked_features <- as.data.frame(info_gain)
-ranked_features <- ranked_features[order(-ranked_features$attr_importance), ]
+# Ensure that the row names, which are the feature names, are included as a column
+info_gain_df$Feature <- rownames(info_gain_df)
 
-## View the ranked features by information gain
+# Remove the row names to avoid confusion
+rownames(info_gain_df) <- NULL
+
+# Sort the features by their information gain values in descending order
+ranked_features <- info_gain_df[order(-info_gain_df$attr_importance), ]
+
+# Print the sorted ranked features
 print(ranked_features)
 
 # Create boxplot and distribution plots of one discriminating (i.e., highest IG score) and one non-discriminating feature (i.e., smallest IG score)
+# Boxplot for the most discriminating feature
+ggplot(diabetes_complete, aes(x = class, y = plas)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Plasma Glucose by Class",
+       x = "Class",
+       y = "Plasma Glucose Levels")
 
-```
+# Distribution plot for the most discriminating feature
+ggplot(diabetes_complete, aes(x = plas, fill = class)) +
+  geom_histogram(binwidth = 10, position = "identity", alpha = 0.5) +
+  labs(title = "Distribution of Plasma Glucose by Class",
+       x = "Plasma Glucose Levels",
+       y = "Count") +
+  theme_minimal()
 
-#
+# Boxplot for the least discriminating feature
+ggplot(diabetes_complete, aes(x = class, y = pedi)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Pedigree Function by Class",
+       x = "Class",
+       y = "Pedigree Function")
 
-```{r Replace}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-#
-
-```{r features}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-#
-
-```{r Rank}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-#
-
-```{r boxplot}
-knitr::opts_chunk$set(echo = TRUE)
+# Distribution plot for the least discriminating feature
+ggplot(diabetes_complete, aes(x = pedi, fill = class)) +
+  geom_histogram(binwidth = 0.1, position = "identity", alpha = 0.5) +
+  labs(title = "Distribution of Pedigree Function by Class",
+       x = "Pedigree Function",
+       y = "Count") +
+  theme_minimal()
 ```

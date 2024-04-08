@@ -10,7 +10,7 @@ Load dataset food.csv
 ```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
 
-root.dir = "/Users/johannesschwietering/Library/Mobile Documents/com~apple~CloudDocs/Studium/UMIT/Modul 12/AMLHC_Tasks_JS1"
+library(ggplot2)
 
 # Load dataset food.csv
 food_data <- read.csv("food.csv", header = TRUE, sep = ",")
@@ -46,6 +46,8 @@ summary_scaled_food_data <- summary(scaled_food_data)
 print(summary_scaled_food_data) # Prints a summary statistics of the scaled data
 ```
 
+The code standardizes the food data by applying a z-transformation, ensuring each feature has a mean of 0 and a standard deviation of 1, which is confirmed by the summary statistics. The summary output for each variable shows that the mean is centered around 0, and the spread of the data around the mean is standardized, which is a common preprocessing step for many statistical analyses and machine learning models.
+
 ## Perform a principal component analysis (R function princomp)
 
 ```{r principal component analysis}
@@ -65,9 +67,19 @@ pca_result$sdev^2
 prop_var_explained <- pca_result$sdev^2 / sum(pca_result$sdev^2)
 prop_var_explained
 ```
+The PCA on the scaled_food_data reveals that the first principal component (PC1) explains 44.52% of the variance within the data, and the first two components combined explain 62.68% of the variance. The loadings show the correlation of each original variable with the components, indicating which variables contribute most to each principal component. For instance, 'RedMeat', 'WhiteMeat', and 'Eggs' have strong loadings on PC1, implying they are important variables for this component. This PCA result allows for the reduction of the dataset's dimensionality while still retaining a significant portion of the original variance.
 
+## Create a score plot using PC1 and PC2 (R function qplot)
+```{r score plot}
+# Extracting the scores for PC1 and PC2
+scores_df <- data.frame(PC1 = pca_result$scores[,1], PC2 = pca_result$scores[,2])
 
-Create a score plot using PC1 and PC2 (R function qplot)
-Update your git-repository. 
+# Creating a score plot with PC1 and PC2
+ggplot(data = scores_df, aes(x = PC1, y = PC2)) +
+  geom_point() +  # Adds a scatter plot layer
+  theme_minimal() +  # Optional: Applies a minimalistic theme
+  labs(title = "PCA Score Plot", x = "PC1 (Principal Component 1)", y = "PC2 (Principal Component 2)")  # Adds labels
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+````
+
+The PCA score plot illustrates that PC1 captures a substantial amount of variance within the dataset, while PC2 captures additional but comparatively less variance.
