@@ -1,0 +1,136 @@
+---
+title: "Task_3_1"
+author: "Johannes Schwietering"
+date: "2024-04-20"
+output: html_document
+---
+
+# Unsupervised learning
+
+##Loading Data
+
+1) Load dataset food.csv
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+# Load the necessary libraries for handling data
+library(clusterCrit)
+library(gplots)
+library(fpc)
+
+
+# Load the dataset named 'food.csv' with the first column as row names
+food_data <- read.csv("food.csv", row.names=1)
+# Display the first few rows of the dataset to verify it loaded correctly
+head(food_data)
+
+```
+
+## Preprocessing
+2) Preprocess data using z-transformation (R function scale)
+
+```{r preprocess, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Preprocess the data using z-transformation
+# The scale function centers and scales the data (mean = 0, SD = 1)
+# Applying z-transformation to all numerical columns in the dataset
+scaled_food_data <- scale(food_data)
+
+# Create a new data frame with the scaled data to handle further analyses if needed
+scaled_food_data <- as.data.frame(scaled_food_data)
+
+```
+
+## Clustering
+3) Apply KMeans for different number of clusters by varying k from 2 to 5. Calculate the Silhouette coefficient (function intCriteria of package clusterCrit) and select the final number of clusters
+
+```{r KMeans, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Convert the scaled data to matrix format required by the kmeans function
+scaled_food_data <- as.matrix(scaled_food_data)
+
+# Prepare to store Silhouette scores for comparison
+silhouette_scores <- numeric(4)
+k_values <- 2:5
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Iterate over k values from 2 to 5 to find the best k based on Silhouette score
+for (k in k_values) {
+  # Apply KMeans clustering
+  kmc <- kmeans(scaled_food_data, centers = k)
+  
+  # Calculate the Silhouette coefficient
+  cl <- intCriteria(scaled_food_data, kmc$cluster, "Silhouette")
+  
+  # Store the Silhouette score
+  silhouette_scores[k - 1] <- cl
+  
+  # Print the cluster centers to inspect them
+  print(paste("K =", k))
+  print(head(kmc$centers))
+}
+
+# Print all Silhouette scores for each k
+names(silhouette_scores) <- paste("k =", k_values)
+print(silhouette_scores)
+
+# Determine the best k based on the maximum Silhouette score
+optimal_k <- which.max(silhouette_scores) + 1  # Adjust index by 1
+cat("The optimal number of clusters (k) based on the Silhouette coefficient is:", optimal_k, "\n")
+
+  kmc <- kmeans(scaled_food_data, centers = 2)
+
+```
+
+## PCA
+4) Visualize the final kMeans clustering using PCA (R function princomp and qplot)
+
+```{r Visualize, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Perform PCA on the scaled data
+pca_result <- princomp(scaled_food_data)
+
+# Get PCA scores
+scores <- pca_result$scores[,1:2]
+scores <- scores*-1
+
+# Plot using qplot from ggplot2
+plot(scores[, "Comp.1"], scores[,"Comp.2"], col=kmc$cluster)
+text(scores[,"Comp.1"], scores[,"Comp.2"], labels=rownames(scaled_food_data), cex=0.5)
+```
+
+## Hierarchical Clustering
+
+5) Create a hierarchical clustering (R function hclust) and plot the dendrogram. In addition, create a heatmap with a clustering of samples and variables (R function heatmap)
+```{r hierarchical, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Compute hierarchical clustering on the distance matrix
+  hcf <- hclust(dist(scaled_food_data))
+  plot(hcf)
+  
+# Create a heatmap with dendrograms for both samples and variables
+  heatmap.2(scaled_food_data, scale="none")
+```
+
+## Density based clustering
+6) Create a density based clustering (R function dbscan of package fpc)
+```{r clustering, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Apply DBSCAN, a density-based clustering algorithm
+  dbc <- dbscan(scaled_food_data,eps=2, MinPts=3)
+  print(dbc)
+
+# Plot the results with DBSCAN cluster assignments
+  plot(scores[, "Comp.1"], scores[,"Comp.2"], col=dbc$cluster)
+  text(scores[,"Comp.1"], scores[,"Comp.2"], labels=rownames(scaled_food_data), cex=0.5)
+
+```
+
+
