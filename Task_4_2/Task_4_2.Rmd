@@ -1,0 +1,47 @@
+---
+title: "Task 4.2"
+author: "Johannes Schwietering"
+date: "2024-05-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(foreign)
+library(caret)
+```
+
+## R Markdown Diabetes Dataset
+
+
+```{r Load dataset}
+
+# Load the diabetes dataset
+diabetes_data <- read.arff("diabetes.arff")
+
+# View the first few rows of the dataset
+head(diabetes_data)
+
+# save as CSV for Python
+write.csv(diabetes_data, "diabetes.csv")
+```
+Data looks good, everything worked well
+
+# Create GLM Model
+
+```{r GLM, echo=TRUE}
+# GLM model
+diaFit <- glm(class ~ ., data=diabetes_data, family="binomial")
+summary(diaFit)
+```
+Significant predictors such as number of pregnancies (preg), plasma glucose concentration (plas), and body mass index (mass) show a strong association with the outcome, as indicated by their p-values. The model demonstrates a good fit, improving on a null model (only an intercept) as evidenced by a lower residual deviance compared to the null deviance and a reasonable Akaike Information Criterion (AIC) score, with the model requiring five iterations to converge.
+
+# GLMfit
+
+```{r GLMfit, echo=TRUE}
+fitControl <- trainControl(method = "cv", number = 10, savePredictions = "final")
+glmFit <- train(class ~ ., data=diabetes_data, method="glm", trControl=fitControl, preProc=c("center","scale"))
+summary(glmFit)
+
+```
+

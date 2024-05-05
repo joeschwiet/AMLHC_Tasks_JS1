@@ -1,0 +1,91 @@
+---
+title: "Task_4_1"
+author: "Johannes Schwietering"
+date: "2024-05-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+```
+
+## Load Data
+
+```{r load_data}
+# Load the diabetes dataset
+heart_data <- read.csv("heartdata.csv")
+
+# View the first few rows of the dataset
+head(heart_data)
+str(heart_data)
+```
+Data looks good, lets continue
+
+
+## Check Assumptions
+
+
+```{r assumptions}
+# Assuming 'heart_data' is already loaded in your R environment
+
+# Assumption 1: Independence of observations
+# Note: Typically checked by understanding the data collection process or using time-series analysis techniques
+# Not applicable here directly because we assume one observation per subject with no time component
+
+# Assumption 2: Normality of the dependent variable
+hist(heart_data$heartdisease, main = "Histogram of Heartdisease", 
+     xlab = "Dependent Variable", breaks = 30, col = "darkgray")
+
+# Assumption 3: Linearity
+plot(heart_data$biking, heart_data$heartdisease, 
+     main = "Scatter Plot of biking vs. heart_disease",
+     xlab = "Independent Variable", ylab = "Dependent Variable",
+     pch = 19, col = "blue")  # pch = 19 makes the points solid, col = "blue" colors them blue
+plot(heart_data$smoking, heart_data$heartdisease, 
+     main = "Scatter Plot of smoking vs.  heart_disease",
+     xlab = "Independent Variable", ylab = "Dependent Variable",
+     pch = 19, col = "blue")  # pch = 19 makes the points solid, col = "blue" colors them blue
+```
+
+Interpretation Histrogram: The histogram displays the frequency distribution of a variable related to heart disease, with the data spread across a range of values from 0 to 20. The distribution is roughly bell-shaped, centered around 10 to 15, indicating that most cases fall within this moderate severity range, with fewer cases exhibiting very low or very high severity.
+
+Interpretation Biking vs heart disease: There is a noticeable downward trend suggesting that increased biking activity is associated with a lower occurrence or severity of heart disease, although the spread of data points indicates that individual responses may vary.
+
+Interpretation Smoking vs. heart disease: There appears to be a generally increasing trend, suggesting that as smoking increases, the incidence or severity of heart disease also tends to increase, though the dispersion of points indicates considerable variability in this relationship.
+
+## Linear model
+```{r linear_model}
+# Fit a linear model 
+model1 <- lm(heartdisease ~ biking, data = heart_data)
+model2 <- lm(heartdisease ~ smoking, data = heart_data)
+model3 <- lm(heartdisease ~ biking + smoking, data=heart_data)
+
+summary(model1)
+summary(model2)
+summary(model3)
+
+```
+Model 1, focused solely on biking, shows a strong inverse relationship between biking and heart disease severity, with a substantial 87.51% of the variance in heart disease explained by biking, indicated by a high R-squared value. Model 2 examines smoking and shows a positive correlation, though it only explains about 9.56% of the variance in heart disease, suggesting a weaker but significant impact of smoking. Model 3 combines both biking and smoking and demonstrates an even stronger model fit, with an R-squared of 97.96%, indicating that together, these factors provide a highly predictive model of heart disease severity. This model robustly supports the protective effect of biking against heart disease and the detrimental impact of smoking, while providing a highly precise estimate of heart disease severity based on these variables.
+
+## Homoscedasticity
+```{r Homoscedasticity}
+par(mfrow=c(2,2))
+plot(model3)
+```
+The "Residuals vs Fitted" plot does not show any obvious pattern or systematic curvature, indicating that the linearity assumption holds well. The "Q-Q Plot" of the standardized residuals indicates that the residuals are approximately normally distributed, as evidenced by the residuals following closely along the diagonal line. The "Scale-Location" plot shows some variation in spread along the range of fitted values but is relatively stable, suggesting only mild concerns regarding heteroscedasticity. Lastly, the "Residuals vs Leverage" plot shows no points with high leverage that have a significant influence on the model, indicating that there are no particularly influential outliers affecting the model fit. Overall, the model appears well-specified with minor concerns related to equal variance of residuals across the range of predictions.
+
+## Train the Model
+```{r Training}
+fitControl <- trainControl(##10-fold CV
+            method = "cv",
+            number = 10)
+lmFit <- train(heartdisease ~ ., data=heart_data, preProcess=c("center", "scale"), method="lm", trControl=fitControl)
+
+print(lmFit)
+summary(lmFit)
+```
+The model fitting was conducted using 10-fold cross-validation, which partitions the data into 10 subsets, using each in turn for validation while training on the remaining subsets. This approach helps in estimating the model's prediction accuracy more robustly by averaging the results across different subsets.
+
+The output shows that the linear regression model achieved an RMSE (Root Mean Squared Error) of 0.651, an R-squared value of 0.981, and an MAE (Mean Absolute Error) of 0.518. These metrics suggest a high predictive accuracy and a strong fit to the data, with the model explaining approximately 98.1% of the variance in heart disease. The RMSE and MAE values are relatively low, indicating small average errors in the predictions.
+
