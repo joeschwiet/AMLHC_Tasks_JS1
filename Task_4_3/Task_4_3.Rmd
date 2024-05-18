@@ -1,0 +1,78 @@
+---
+title: "Task_4_3"
+author: "Johannes Schwietering"
+date: "2024-05-18"
+output: html_document
+---
+
+Start with setting up this session. ToDo: Add best practice here
+```{r}
+
+  require(caret)
+  data(BloodBrain)
+  
+  X <- bbbDescr
+  y <- logBBB
+
+  #lets check if that worked
+  str(X)
+  length(y)
+
+```
+
+## Data Partition
+
+Now we create a separate test data to get an realistic estimate of our performance after hyperparamter tuning. 
+
+```{r}
+
+#create Data partition
+ inTrain <- createDataPartition(y, p=0.75, list=FALSE)
+
+# lets checj if that worked, length should be around 150
+  length(inTrain)
+  
+# 
+  X_train <- X[inTrain,]
+  y_train <- y[inTrain]
+  X_test <- X[-inTrain,]
+  y_test <- y[-inTrain]
+  
+# lets check if that worked
+  dim(X_train)
+  dim(y_train)
+
+```
+
+## Train Model
+
+Now we train and evaluate our model using random forest
+
+
+```{r}
+
+trControl <- trainControl(method="cv", number = 10)
+model_rf <- train(X_train, y_train, method="rf", preProcess = c("center","scale"), trainControl=trControl)
+
+
+```
+
+
+```{r}
+  vi <- varImp(model_rf)
+
+```
+
+Now we extract the best tune on our separate test set
+
+```{r}
+  best_rf <- model_rf$finalModel
+  y_predicted <- predict(best_rf, X_test)
+  
+# lets see if it worked
+  y_predicted
+  RMSE(y_predicted, y_test)
+
+```
+
+
