@@ -1,0 +1,186 @@
+---
+title: "Final Exam Modul 12"
+author: "Johannes Schwietering"
+date: "2024-06-22"
+output: html_document
+
+---
+
+# How to predict readmission for diabetic patients?
+
+## Introduction
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+#Set Working Directory with setwd("path_to_folder")
+
+#load libraries
+library(ggplot2)
+library(dplyr)
+library(FSelector)
+library(rpart)
+library(rpart.plot)
+library(nnet)
+
+
+
+```
+
+
+
+```{r Getting_Overview}
+#Load Data
+diabetes_data <- read.csv("diabetic_data.csv")
+
+# Getting an Overview 
+# Structure of the dataset
+str(diabetes_data)
+dim(diabetes_data)
+distinct_values <- lapply(diabetes_data, unique)
+print(distinct_values)
+
+# Create a bar plot for the readmitted variable
+bar_plot <- ggplot(diabetes_data, aes(x = readmitted)) +
+  geom_bar(fill = "blue", color = "black") +
+  labs(title = "Histogram of Readmitted Patients",
+       x = "Readmission Status",
+       y = "Count") +
+  theme_minimal()
+
+# Print the plot object
+print(bar_plot)
+
+# how many encounters are there?
+num_unique_encounters <- length(unique(diabetes_data$encounter_id))
+print(paste("Number of unique encounters:", num_unique_encounters))
+
+# Number of unique patients
+num_unique_patients <- length(unique(diabetes_data$patient_nbr))
+print(paste("Number of unique patients:", num_unique_patients))
+
+# Count the number of occurrences of each patient_nbr
+patient_counts <- table(diabetes_data$patient_nbr)
+
+# Identify patient_nbr that are unique (appear only once)
+unique_patient_nbr <- names(patient_counts[patient_counts == 1])
+
+# Create a data frame excluding rows with unique patient_nbr
+df_non_unique_patients <- diabetes_data[!(diabetes_data$patient_nbr %in% unique_patient_nbr), ]
+readmission_status_non_unique <- table(df_non_unique_patients$readmitted)
+cat("Readmission status for non-unique patients:\n")
+print(readmission_status_non_unique)
+
+# Create a data frame only containing rows with unique patient_nbr
+df_unique_patients <- diabetes_data[diabetes_data$patient_nbr %in% unique_patient_nbr, ]
+
+readmission_status_unique <- table(df_unique_patients$readmitted)
+cat("Readmission status for unique patients:\n")
+print(readmission_status_unique)
+
+# Print the number of rows in each data frame to verify
+cat("Number of rows in df_non_unique_patients:", nrow(df_non_unique_patients), "\n")
+cat("Number of rows in df_unique_patients:", nrow(df_unique_patients), "\n")
+
+```
+## Missing Values Code
+```{r missing_values_code, echo=TRUE}
+
+# Replacing "?" with NA
+diabetes_data[diabetes_data == "?"] <- NA
+
+# Calculate the percentage of missing values for each attribute
+missing_values <- 
+  sapply(diabetes_data, function(x) sum(is.na(x)) / length(x) * 100)
+
+# Create a data frame with the results
+missing_values_df <- data.frame(
+  attribute = names(missing_values),
+  missing_percentage = missing_values
+)
+
+# Filter the data frame to include only variables with missing percentage > 0
+missing_values_filtered <- missing_values_df[missing_values_df$missing_percentage > 0, ]
+
+# Add a row for "All other Variables"
+all_others_row <- data.frame(
+  attribute = "All other Variables",
+  missing_percentage = 0
+)
+
+# Combine the filtered data frame with the "All other Variables" row
+final_missing_values_df <- rbind(missing_values_filtered, all_others_row)
+final_missing_values_df$missing_percentage <- round(final_missing_values_df$missing_percentage, 2)
+rownames(final_missing_values_df) <- NULL
+
+```
+
+## Missing Values Table
+```{r missing_values_table, echo=TRUE}
+# Print the resulting data frame
+print(final_missing_values_df)
+```
+
+## Feature Selection with Information Gain
+```{r feature_selection}
+# Berechnung des Information Gain für die Merkmale
+info_gain_results <- information.gain(readmitted ~ ., data = diabetes_data)
+info_gain_results <- data.frame(attribute = rownames(info_gain_results), 
+                                attribute_importance = info_gain_results$attr_importance)
+
+ranked_info_gain_results <- info_gain_results[order(-info_gain_results$attribute_importance), ]
+
+# Ergebnisse anzeigen
+print(ranked_info_gain_results)
+```
+##Logistische Regression HbA1c
+```{r decision_tree, echo = TRUE}
+#Zielvariable in Faktor umwandeln
+diabetes_data$readmitted <- factor(diabetes_data$readmitted, levels = c("NO", ">30", "<30"))
+
+# Erstellen des Modells
+multinom_model <- multinom(readmitted ~ A1Cresult + diag_1, data = diabetes_data)
+
+# Zusammenfassung des Modells anzeigen
+summary(multinom_model)
+
+
+
+```
+
+
+
+
+## Decision tree
+```{r decision_tree, echo = TRUE}
+# Wählen Sie die wichtigsten Merkmale basierend auf dem Information Gain aus
+top_features <- c("number_inpatient", "diag_1", "diag_2", "diag_3")
+
+# Sicherstellen, dass die Zielvariable 'readmitted' als Faktor vorliegt
+diabetes_data$readmitted <- as.factor(diabetes_data$readmitted)
+
+# Erstellen der Formel für den Entscheidungsbaum
+formula <- as.formula(paste("readmitted ~", paste(top_features, collapse = " + ")))
+
+# Erstellen des Entscheidungsbaum-Modells mit begrenzter Tiefe
+# tree_model <- rpart(formula, data = diabetes_data, method = "class",
+#                   control = rpart.control(maxdepth = 5, minsplit = 20, cp = 0.01))
+
+# Plotten der ersten paar Ebenen des Baums
+#plot(tree_model)
+#text(tree_model, use.n = TRUE, all = TRUE, cex = 0.7)
+
+```
+
+```{r regression, echo = TRUE}
+
+
+
+```
+
+## Slide with Plot
+
+```{r pressure}
+plot(pressure)
+```
