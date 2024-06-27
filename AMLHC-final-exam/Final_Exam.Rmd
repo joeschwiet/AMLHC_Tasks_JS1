@@ -9,12 +9,25 @@ output: html_document
 # How to predict readmission for diabetic patients?
 
 ## Introduction
+Dataset called "Diabetes 130-US Hospitals for Years 1999-2008" from Strack et al. 
+Published in 2014 in the journal BioMed Research International
+Research Question: Is the measurement of HbA1c associated with a reduction in readmission rates in individuals admitted to a hospital?
+Answer: No, the measurement of HbA1x is not per se associated with a reduction in readmission rates.However, the relationship between the probability of readmission and the HbA1c measurement depends on the primary diagnosis. 
 
+Personal Research Questions
+1) Reproduce findings from Strack et al. (multivariable logistische Regression)
+2) Which items predict best the readmossion of patients? (using Feature Selection with Information Gain, multivariable logistische Regression and Decision Tree)
+3) Identifying patterns in medication to predict readmission (Using K-Means Clustering, PCA-Analysis, hierarchical clustering (R function hclust)
 
+Personal Interest: A family member has diabetes and the challenge of predicting the need for readmission is therefore of personal relevance. 
 
-```{r setup, include=FALSE}
+Citation: "Beata Strack, Jonathan P. DeShazo, Chris Gennings, Juan L. Olmo, Sebastian Ventura, Krzysztof J. Cios, and John N. Clore, “Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records,” BioMed Research International, vol. 2014, Article ID 781670, 11 pages, 2014."
+
+```{r setup}
 knitr::opts_chunk$set(echo = FALSE)
 #Set Working Directory with setwd("path_to_folder")
+
+# 
 
 #load libraries
 library(ggplot2)
@@ -23,14 +36,15 @@ library(FSelector)
 library(rpart)
 library(rpart.plot)
 library(nnet)
-
-
+library(knitr)
 
 ```
 
+## Getting an Overview
+To get an overview I'm looking at the structure and the dimensions of the dataset as well as the independent and dependent variable (readmission)
 
 
-```{r Getting_Overview}
+```{r Getting_Overview, echo=TRUE}
 #Load Data
 diabetes_data <- read.csv("diabetic_data.csv")
 
@@ -38,8 +52,7 @@ diabetes_data <- read.csv("diabetic_data.csv")
 # Structure of the dataset
 str(diabetes_data)
 dim(diabetes_data)
-distinct_values <- lapply(diabetes_data, unique)
-print(distinct_values)
+kable(head(diabetes_data), format = "html", table.attr = 'class="table table-striped table-hover"')
 
 # Create a bar plot for the readmitted variable
 bar_plot <- ggplot(diabetes_data, aes(x = readmitted)) +
@@ -49,9 +62,13 @@ bar_plot <- ggplot(diabetes_data, aes(x = readmitted)) +
        y = "Count") +
   theme_minimal()
 
-# Print the plot object
 print(bar_plot)
+```
 
+
+### Understanding the focus on encounter vs. patients
+
+```{r encounte_patients, echo=TRUE, results='hide'}
 # how many encounters are there?
 num_unique_encounters <- length(unique(diabetes_data$encounter_id))
 print(paste("Number of unique encounters:", num_unique_encounters))
@@ -84,7 +101,15 @@ cat("Number of rows in df_non_unique_patients:", nrow(df_non_unique_patients), "
 cat("Number of rows in df_unique_patients:", nrow(df_unique_patients), "\n")
 
 ```
-## Missing Values Code
+![Understanding the "Encounters" and "Patient" Variable.](/Users/johannesschwietering/Library/Mobile Documents/com~apple~CloudDocs/Studium/UMIT/Modul 12/AMLHC_Tasks_JS1/AMLHC-final-exam/encounter.png)
+
+## Cleaning and preprocessing the data
+
+### Missing Values
+As shown in the table below most of the variables have no missing values. However, a few variables need 
+- The variables weight, payer code, medical_specialty and diag_3 are all excluded as they are not needed for the analysis
+- race is important I therefore decided to delete all rows with missing value for race. 
+
 ```{r missing_values_code, echo=TRUE}
 
 # Replacing "?" with NA
@@ -114,16 +139,111 @@ final_missing_values_df <- rbind(missing_values_filtered, all_others_row)
 final_missing_values_df$missing_percentage <- round(final_missing_values_df$missing_percentage, 2)
 rownames(final_missing_values_df) <- NULL
 
-```
-
-## Missing Values Table
-```{r missing_values_table, echo=TRUE}
 # Print the resulting data frame
 print(final_missing_values_df)
+
+# Delete columns weight, payer:code, medical_specialty and diag_3
+diabetes_data <- diabetes_data[, !(colnames(diabetes_data) %in% c("weight", "payer_code", "medical_specialty", "diag_3"))]
+
+# Delete all rows where the variable "race" is NA
+diabetes_data <- diabetes_data[!is.na(diabetes_data$race), ]
 ```
 
+### Handling Outliers
+As I've 
+The authors have already dealt with outliers by transforming most numeric features into categorical features: 
+- The variable A1c test result is divided in three groups: Values: “>8” if the result was greater than 8%, “>7” if the result was greater than 7% but less than 8%, “normal” if the result was less than 7%, and “none” if not measured.
+- Age grouped in 10-year intervals
+
+I will check for outliers in the following variables creating boxplots
+- time_in_hospital
+- num_lab_procedures
+- num_medications
+- number_diagnoses
+
+```{r Outlier, echo=TRUE}
+# Box plot for time_in_hospital
+boxplot(diabetes_data$time_in_hospital,
+        main = "Box Plot of Time in Hospital",
+        ylab = "Time in Hospital (days)",
+        col = "lightblue")
+
+# Box plot for num_lab_procedures
+boxplot(diabetes_data$num_lab_procedures,
+        main = "Box Plot of Number of Lab Procedures",
+        ylab = "Number of Lab Procedures",
+        col = "lightgreen")
+
+# Box plot for num_medications
+boxplot(diabetes_data$num_medications,
+        main = "Box Plot of Number of Medications",
+        ylab = "Number of Medications",
+        col = "lightcoral")
+
+# Box plot for number_diagnoses
+boxplot(diabetes_data$number_diagnoses,
+        main = "Box Plot of Number of Diagnoses",
+        ylab = "Number of Diagnoses",
+        col = "lightyellow")
+
+# Define and apply a function for IQR based outlier detection and replace the detected outliers function to replace outliers with NA
+replace_outliers_with_NA <- function(x) {
+  Q1 <- quantile(x, 0.25, na.rm = TRUE)
+  Q3 <- quantile(x, 0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  lower_bound <- Q1 - 1.5 * IQR
+  upper_bound <- Q3 + 1.5 * IQR
+  
+  x[x < lower_bound | x > upper_bound] <- NA
+  return(x)
+}
+
+# List of columns to apply the function to
+columns_to_check <- c("time_in_hospital", "num_lab_procedures", "num_medications", "number_diagnoses")
+
+# Apply the function only to the specified columns
+diabetes_data[columns_to_check] <- lapply(diabetes_data[columns_to_check], replace_outliers_with_NA)
+
+# Check the summary to verify the changes
+summary(diabetes_data[columns_to_check])
+
+sapply(diabetes_data[columns_to_check], function(x) sum(is.na(x)))
+
+# Now, select only the complete cases
+diabetes_data <- diabetes_data[complete.cases(diabetes_data[columns_to_check]), ]
+
+```
+
+### Convert Data Types and Feature Engineering
+Most of the categorical variables were formated as characters. We will change them to factor. That applies to
+- race
+- gender
+- age
+- max_glu_serum
+- A1Cresult
+- readmitted
+- metformin, repaglinide, nateglinide, chlorpropamide, glimepiride, acetohexamide, glipizide, glyburide, tolbutamide, pioglitazone, rosiglitazone, acarbose, miglitol, troglitazone, tolazamide, examide, citoglipton, insulin, glyburide.metformin, glipizide.metformin, glimepiride.pioglitazone, metformin.rosiglitazone, metformin.pioglitazone, change, diabetesMed
+
+```{r Data_types, echo=TRUE}
+# List of variables to convert to factors
+variables_to_convert <- c("race", "gender", "age", "max_glu_serum", "A1Cresult", "readmitted",
+                          "metformin", "repaglinide", "nateglinide", "chlorpropamide", "glimepiride",
+                          "acetohexamide", "glipizide", "glyburide", "tolbutamide", "pioglitazone",
+                          "rosiglitazone", "acarbose", "miglitol", "troglitazone", "tolazamide", 
+                          "examide", "citoglipton", "insulin", "glyburide.metformin", "glipizide.metformin",
+                          "glimepiride.pioglitazone", "metformin.rosiglitazone", "metformin.pioglitazone",
+                          "change", "diabetesMed")
+
+# Convert specified variables to factors
+diabetes_data[variables_to_convert] <- lapply(diabetes_data[variables_to_convert], as.factor)
+
+```
+
+### Normalizing Data
+I will normalize or standardize numerical features to bring them to a common scale when needed for the specific analysis
+
 ## Feature Selection with Information Gain
-```{r feature_selection}
+```{r feature_selection, echo=TRUE}
 # Berechnung des Information Gain für die Merkmale
 info_gain_results <- information.gain(readmitted ~ ., data = diabetes_data)
 info_gain_results <- data.frame(attribute = rownames(info_gain_results), 
@@ -134,19 +254,13 @@ ranked_info_gain_results <- info_gain_results[order(-info_gain_results$attribute
 # Ergebnisse anzeigen
 print(ranked_info_gain_results)
 ```
-##Logistische Regression HbA1c
-```{r decision_tree, echo = TRUE}
-#Zielvariable in Faktor umwandeln
-diabetes_data$readmitted <- factor(diabetes_data$readmitted, levels = c("NO", ">30", "<30"))
-
+## Multivariate Logistische Regression HbA1c
+```{r log_regression, echo = TRUE}
 # Erstellen des Modells
-multinom_model <- multinom(readmitted ~ A1Cresult + diag_1, data = diabetes_data)
+multinom_model <- multinom(readmitted ~ A1Cresult, data = diabetes_data)
 
 # Zusammenfassung des Modells anzeigen
 summary(multinom_model)
-
-
-
 ```
 
 
