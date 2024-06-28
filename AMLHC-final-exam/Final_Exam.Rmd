@@ -9,25 +9,39 @@ output: html_document
 # How to predict readmission for diabetic patients?
 
 ## Introduction
-Dataset called "Diabetes 130-US Hospitals for Years 1999-2008" from Strack et al. 
-Published in 2014 in the journal BioMed Research International
-Research Question: Is the measurement of HbA1c associated with a reduction in readmission rates in individuals admitted to a hospital?
-Answer: No, the measurement of HbA1x is not per se associated with a reduction in readmission rates.However, the relationship between the probability of readmission and the HbA1c measurement depends on the primary diagnosis. 
+The dataset titled "Diabetes 130-US Hospitals for Years 1999-2008" from Strack et al., published in 2014 in the journal BioMed Research International, serves as the foundation for my research.
 
-Personal Research Questions
-1) Reproduce findings from Strack et al. (multivariable logistische Regression)
-2) Which items predict best the readmossion of patients? (using Feature Selection with Information Gain, multivariable logistische Regression and Decision Tree)
-3) Identifying patterns in medication to predict readmission (Using K-Means Clustering, PCA-Analysis, hierarchical clustering (R function hclust)
+**Primary Research Question**
 
-Personal Interest: A family member has diabetes and the challenge of predicting the need for readmission is therefore of personal relevance. 
+- **Is the measurement of HbA1c associated with a reduction in readmission rates for individuals admitted to a hospital?**
+
+**Secondary Research Questions**
+
+- Which factors best predict patient readmission?
+- What additional insights can be derived from the data? (This broad question allows for the application of various analytical methods.)
+
+**Personal Interest**
+
+The challenge of predicting hospital readmissions is of personal relevance to me, as a family member has diabetes. This research holds significant personal importance and drives my motivation to uncover meaningful insights.
 
 Citation: "Beata Strack, Jonathan P. DeShazo, Chris Gennings, Juan L. Olmo, Sebastian Ventura, Krzysztof J. Cios, and John N. Clore, “Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records,” BioMed Research International, vol. 2014, Article ID 781670, 11 pages, 2014."
 
-```{r setup}
-knitr::opts_chunk$set(echo = FALSE)
-#Set Working Directory with setwd("path_to_folder")
+## Method
+To answer the research questions, the following steps will be conducted:
 
-# 
+1. **Providing an Overview of the Dataset**
+2. **Cleaning the Data**
+3. **Preprocessing the Data**
+4. **Feature Selection with Information Gain**
+5. **Multinomial Logistic Regression (Without Covariates)**
+6. **Logistic Regression with Covariates**
+7. **Random Forest V1**
+8. **Random Forest V2**
+9. **Small Excursus to Unsupervised Learning**
+
+
+```{r setup, echo=FALSE, results='hide', message=FALSE}
+#Set Working Directory with setwd("path_to_folder")
 
 #load libraries
 library(ggplot2)
@@ -37,14 +51,19 @@ library(rpart)
 library(rpart.plot)
 library(nnet)
 library(knitr)
+library(caret)
+library(clusterCrit)
+library(gplots)
+library(fpc)
 
 ```
 
 ## Getting an Overview
-To get an overview I'm looking at the structure and the dimensions of the dataset as well as the independent and dependent variable (readmission)
+
+To get an overview, I will examine the structure and dimensions of the dataset, as well as the independent and dependent variables (readmission).
 
 
-```{r Getting_Overview, echo=TRUE}
+```{r Getting_Overview, echo=TRUE, message=FALSE, warning=FALSE}
 #Load Data
 diabetes_data <- read.csv("diabetic_data.csv")
 
@@ -56,19 +75,36 @@ kable(head(diabetes_data), format = "html", table.attr = 'class="table table-str
 
 # Create a bar plot for the readmitted variable
 bar_plot <- ggplot(diabetes_data, aes(x = readmitted)) +
-  geom_bar(fill = "blue", color = "black") +
-  labs(title = "Histogram of Readmitted Patients",
+  geom_bar(fill = "skyblue", color = "black") +
+  labs(title = "Readmission Status of Patients",
        x = "Readmission Status",
        y = "Count") +
-  theme_minimal()
+  theme_minimal() +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.5, color="black", size=4) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10)
+  )
 
+# Plot anzeigen
 print(bar_plot)
 ```
+
+### Learnings from the Overview
+
+- Large dataset with over 100,000 encounters.
+- Dependent variable is called "readmission."
+- Main independent variable is called "A1Cresult."
+- Overview of further independent variables.
+- Majority of patients were not readmitted.
 
 
 ### Understanding the focus on encounter vs. patients
 
-```{r encounte_patients, echo=TRUE, results='hide'}
+```{r encounte_patients, echo=TRUE, message=FALSE, warning=FALSE}
 # how many encounters are there?
 num_unique_encounters <- length(unique(diabetes_data$encounter_id))
 print(paste("Number of unique encounters:", num_unique_encounters))
@@ -103,14 +139,23 @@ cat("Number of rows in df_unique_patients:", nrow(df_unique_patients), "\n")
 ```
 ![Understanding the "Encounters" and "Patient" Variable.](/Users/johannesschwietering/Library/Mobile Documents/com~apple~CloudDocs/Studium/UMIT/Modul 12/AMLHC_Tasks_JS1/AMLHC-final-exam/encounter.png)
 
+### Additional Learnings
+
+- The observations in the dataset are encounters and not individual patients.
+- Patients can be included multiple times. While the majority is included only once, some patients are included up to 40 times.
+- About 12,000 patients were readmitted but are only included in the dataset once. This raises concerns about the data quality.
+
+
 ## Cleaning and preprocessing the data
 
 ### Missing Values
-As shown in the table below most of the variables have no missing values. However, a few variables need 
-- The variables weight, payer code, medical_specialty and diag_3 are all excluded as they are not needed for the analysis
-- race is important I therefore decided to delete all rows with missing value for race. 
+As shown in the table below, most of the variables have no missing values. However, some variables contain a higher number of missing values, and the following decisions were made on how to deal with those:
 
-```{r missing_values_code, echo=TRUE}
+- The variables `weight`, `payer_code`, `medical_specialty`, and `diag_3` are all excluded as they are not needed for the analysis.
+- `race` is important, and therefore I decided to delete all rows with missing values for `race`.
+
+
+```{r missing_values_code, echo=TRUE, message=FALSE, warning=FALSE}
 
 # Replacing "?" with NA
 diabetes_data[diabetes_data == "?"] <- NA
@@ -150,18 +195,23 @@ diabetes_data <- diabetes_data[!is.na(diabetes_data$race), ]
 ```
 
 ### Handling Outliers
-As I've 
-The authors have already dealt with outliers by transforming most numeric features into categorical features: 
-- The variable A1c test result is divided in three groups: Values: “>8” if the result was greater than 8%, “>7” if the result was greater than 7% but less than 8%, “normal” if the result was less than 7%, and “none” if not measured.
-- Age grouped in 10-year intervals
 
-I will check for outliers in the following variables creating boxplots
-- time_in_hospital
-- num_lab_procedures
-- num_medications
-- number_diagnoses
+The authors have already dealt with many outliers by transforming most numeric features into categorical features:
 
-```{r Outlier, echo=TRUE}
+- The variable `A1Cresult` is divided into three groups: Values are “>8” if the result was greater than 8%, “>7” if the result was greater than 7% but less than 8%, “normal” if the result was less than 7%, and “none” if not measured.
+- Age is grouped in 10-year intervals.
+
+However, there are a number of variables for which the handling of outliers must be decided. I will visually check for outliers in the following variables by creating boxplots:
+
+- `time_in_hospital`
+- `num_lab_procedures`
+- `num_medications`
+- `number_diagnoses`
+
+After inspecting the boxplots, the decision was made to replace outliers with NA.
+
+
+```{r Outlier, echo=TRUE, message=FALSE, warning=FALSE}
 # Box plot for time_in_hospital
 boxplot(diabetes_data$time_in_hospital,
         main = "Box Plot of Time in Hospital",
@@ -214,17 +264,60 @@ diabetes_data <- diabetes_data[complete.cases(diabetes_data[columns_to_check]), 
 
 ```
 
-### Convert Data Types and Feature Engineering
-Most of the categorical variables were formated as characters. We will change them to factor. That applies to
-- race
-- gender
-- age
-- max_glu_serum
-- A1Cresult
-- readmitted
-- metformin, repaglinide, nateglinide, chlorpropamide, glimepiride, acetohexamide, glipizide, glyburide, tolbutamide, pioglitazone, rosiglitazone, acarbose, miglitol, troglitazone, tolazamide, examide, citoglipton, insulin, glyburide.metformin, glipizide.metformin, glimepiride.pioglitazone, metformin.rosiglitazone, metformin.pioglitazone, change, diabetesMed
+### Group Diagnosis
 
-```{r Data_types, echo=TRUE}
+The main diagnosis (variable `diag_1`) is displayed as ICD-10 code. For conducting the logistic regression, it is recommended to group the diagnoses into different categories, as done by the authors of the research article. They recommend grouping the diagnostic codes into four groups:
+
+- **Diabetes**: (ICD-9: 250.xx)
+- **Diseases of the respiratory system**: (ICD-9: 460–519, 786)
+- **Diseases of the circulatory system**: (ICD-9: 390–459, 785)
+.
+
+```{r Diagnosis, echo=TRUE, message=FALSE, warning=FALSE}
+# Entfernen des Textes nach dem Punkt und Umwandeln in Integer
+diabetes_data$diag_1_clean <- as.integer(sub("\\..*", "", diabetes_data$diag_1))
+
+# Funktion zum Gruppieren der ICD-Werte
+group_icd <- function(icd_code) {
+  if (is.na(icd_code)) {
+    return(NA)
+  } else if (icd_code == 250) {
+    return("Diabetes")
+  } else if ((icd_code >= 460 && icd_code <= 519) || icd_code == 786) {
+    return("respiratory")
+  } else if ((icd_code >= 390 && icd_code <= 459) || icd_code == 785) {
+    return("circulatory")
+  } else {
+    return("other")
+  }
+}
+
+# Anwenden der Funktion auf die bereinigte Variable diag_1_clean
+diabetes_data$diag_1_grouped <- sapply(diabetes_data$diag_1_clean, group_icd)
+
+# Überprüfen der neuen Variable
+table(diabetes_data$diag_1_grouped)
+
+# Umwandeln der Krankheitsgruppen in einen Faktor
+diabetes_data$diag_1_grouped <- as.factor(diabetes_data$diag_1_grouped)
+
+
+```
+
+### Convert Data Types and Feature Engineering
+
+Most of the categorical variables were formatted as characters. We will change them to factors. This applies to:
+
+- `race`
+- `gender`
+- `age`
+- `max_glu_serum`
+- `A1Cresult`
+- `readmitted`
+- `metformin`, `repaglinide`, `nateglinide`, `chlorpropamide`, `glimepiride`, `acetohexamide`, `glipizide`, `glyburide`, `tolbutamide`, `pioglitazone`, `rosiglitazone`, `acarbose`, `miglitol`, `troglitazone`, `tolazamide`, `examide`, `citoglipton`, `insulin`, `glyburide.metformin`, `glipizide.metformin`, `glimepiride.pioglitazone`, `metformin.rosiglitazone`, `metformin.pioglitazone`, `change`, `diabetesMed`
+
+
+```{r Data_types, echo=TRUE, message=FALSE, warning=FALSE}
 # List of variables to convert to factors
 variables_to_convert <- c("race", "gender", "age", "max_glu_serum", "A1Cresult", "readmitted",
                           "metformin", "repaglinide", "nateglinide", "chlorpropamide", "glimepiride",
@@ -232,7 +325,7 @@ variables_to_convert <- c("race", "gender", "age", "max_glu_serum", "A1Cresult",
                           "rosiglitazone", "acarbose", "miglitol", "troglitazone", "tolazamide", 
                           "examide", "citoglipton", "insulin", "glyburide.metformin", "glipizide.metformin",
                           "glimepiride.pioglitazone", "metformin.rosiglitazone", "metformin.pioglitazone",
-                          "change", "diabetesMed")
+                          "change", "diabetesMed", "admission_type_id","discharge_disposition_id", "admission_source_id" )
 
 # Convert specified variables to factors
 diabetes_data[variables_to_convert] <- lapply(diabetes_data[variables_to_convert], as.factor)
@@ -240,10 +333,15 @@ diabetes_data[variables_to_convert] <- lapply(diabetes_data[variables_to_convert
 ```
 
 ### Normalizing Data
-I will normalize or standardize numerical features to bring them to a common scale when needed for the specific analysis
+
+I will normalize or standardize numerical features to bring them to a common scale when needed for the specific analysis.
 
 ## Feature Selection with Information Gain
-```{r feature_selection, echo=TRUE}
+
+Um einen ersten Überblick über den informativen Wert der Merkmale im Hinblick auf die Vorhersage der abhängigen Variablen (Wiederaufnahme) zu erhalten, führen wir eine einfache Merkmalsauswahl mit Informationsgewinn durch. Der Informationsgewinn gibt dabei an, wie viel die Unsicherheit über die abhängige Variable verringert wird, wenn das jeweilige Merkmal bekannt ist.
+
+
+```{r feature_selection, echo=TRUE, message=FALSE, warning=FALSE}
 # Berechnung des Information Gain für die Merkmale
 info_gain_results <- information.gain(readmitted ~ ., data = diabetes_data)
 info_gain_results <- data.frame(attribute = rownames(info_gain_results), 
@@ -254,47 +352,353 @@ ranked_info_gain_results <- info_gain_results[order(-info_gain_results$attribute
 # Ergebnisse anzeigen
 print(ranked_info_gain_results)
 ```
-## Multivariate Logistische Regression HbA1c
-```{r log_regression, echo = TRUE}
+
+**Interpretation**
+
+Die Berechnung des Information Gain für die Merkmale im Datensatz zur Vorhersage der Wiedereinweisung (readmitted) zeigt, dass "number_inpatient" (Anzahl der stationären Besuche des Patienten im Jahr vor dem Krankenhausaufenthalt) das Merkmal mit dem höchsten Informationsgewinn ist, gefolgt von "diag_1" und "diag_2". Dies deutet darauf hin, dass die Anzahl der stationären Aufenthalte am stärksten zur Erklärung der Varianz in der Zielvariable beiträgt. Überraschenderweise ist ein weiteres wichtiges Merkmal die "patient_nbr" (Eindeutiger Identifikator eines Patienten), obwohl diese Variable keinen prädiktiven Wert hat, sondern nur eine zufällige ID darstellt.
+
+Merkmale wie "age", "race" und "A1Cresult" (HbA1c-Wert) zeigen im Vergleich dazu einen geringeren Informationsgewinn, was auf eine geringere Bedeutung für die Zielvariable hinweist. In den folgenden Untersuchungen werden wir uns die Auswirkungen des HbA1c-Werts noch genauer anschauen.
+
+## Multinomiale Logistische Regression ohne Covariablen
+
+Ich analysiere die Wahrscheinlichkeit der Wiederaufnahme von Patienten (readmitted) in eine Klinik basierend auf ihrem A1C-Ergebnis (A1Cresult). Die Referenzkategorie für die abhängige Variable wurde auf "NO" gesetzt, was bedeutet, dass die Modellkoeffizienten die Wahrscheinlichkeit eines Patienten in den Kategorien "<30" und ">30" im Vergleich zur Kategorie "NO" beschreiben.
+
+
+```{r multinomiale_regression, echo=TRUE, message=FALSE, warning=FALSE}
+# Ändern der Referenzkategorie auf "NO"
+diabetes_data$readmitted <- relevel(diabetes_data$readmitted, ref = "NO")
+
 # Erstellen des Modells
 multinom_model <- multinom(readmitted ~ A1Cresult, data = diabetes_data)
 
 # Zusammenfassung des Modells anzeigen
 summary(multinom_model)
+
+# Extrahieren der Koeffizienten und Standardfehler
+coeffs <- summary(multinom_model)$coefficients
+std_errs <- summary(multinom_model)$standard.errors
+
+# Berechnen der z-Werte
+z_values <- coeffs / std_errs
+
+# Berechnen der p-Werte
+p_values <- 2 * (1 - pnorm(abs(z_values)))
+
+# Ausgabe der p-Werte
+p_values
+
 ```
 
+**Interpretation**
+
+Intercepts:
+
+- Für die Kategorie <30 beträgt der Intercept -1.7313592.
+- Für die Kategorie >30 beträgt der Intercept -0.4571126.
+
+A1Cresult>8:
+
+- Ein positiver Koeffizient von 0.04096509 für <30 deutet darauf hin, dass höhere A1C-Werte (>8) die Wahrscheinlichkeit der Wiederaufnahme in die Kategorie <30 im Vergleich zur Referenzkategorie "NO" leicht erhöhen.
+
+Der Koeffizient 0.04096509 bedeutet, dass der natürliche Logarithmus der Odds, dass ein Patient in die Kategorie <30 fällt, um 0.04096509 steigt, wenn der A1C-Wert >8 ist, 
+Odds=exp(0.04096509)≈1.0418 Das bedeutet, dass die Odds, dass ein Patient in die Kategorie <30 fällt, um den Faktor 1.0418 steigen  Anders ausgedrückt, es gibt eine etwa 4.18% höhere Chance, dass ein Patient in die Kategorie <30 fällt,
+
+- Ein positiver Koeffizient von 0.06333964 für >30 deutet darauf hin, dass höhere A1C-Werte (>8) auch die Wahrscheinlichkeit der Wiederaufnahme in die Kategorie >30 im Vergleich zur Referenzkategorie "NO" erhöhen.
+
+A1CresultNone:
+
+- Ein positiver Koeffizient von 0.2005823 für <30 bedeutet, dass das Fehlen eines A1C-Ergebnisses die Wahrscheinlichkeit der Wiederaufnahme in die Kategorie <30 im Vergleich zu "NO" erhöht.
+- Ein positiver Koeffizient von 0.0568501 für >30 zeigt, dass das Fehlen eines A1C-Ergebnisses auch die Wahrscheinlichkeit der Wiederaufnahme in die Kategorie >30 im Vergleich zu "NO" erhöht.
+
+A1CresultNorm:
+
+- Ein negativer Koeffizient von -0.06985249 für <30 deutet darauf hin, dass normale A1C-Werte die Wahrscheinlichkeit der Wiederaufnahme in die Kategorie <30 im Vergleich zu "NO" leicht verringern.
+- Ein negativer Koeffizient von -0.12353739 für >30 deutet darauf hin, dass normale A1C-Werte die Wahrscheinlichkeit der Wiederaufnahme in die Kategorie >30 im Vergleich zu "NO" ebenfalls verringern.
+
+Standardfehler und Signifikanz
+Die Standardfehler der Koeffizienten geben an, wie stark die geschätzten Koeffizienten variieren. Kleinere Standardfehler deuten auf präzisere Schätzungen hin. Hier sind die Standardfehler relativ klein, was auf zuverlässige Schätzungen hindeutet.
+
+Kategorie <30: Die Standardfehler für die Koeffizienten liegen zwischen 0.05859624 und 0.0779516.
+Kategorie >30: Die Standardfehler für die Koeffizienten liegen zwischen 0.03649908 und 0.0487445.
+
+Modellgüte
+
+- Residual Deviance: 179575
+- AIC: 179591
+
+
+p-Werte
+
+- Der p-Wert für die Kategorie <30 Tagen bei A1C Result:None ist 0.0007841546, was deutlich kleiner als 0.05 ist. Dies bedeutet, dass der Koeffizient für A1CresultNone hoch signifikant ist. Ein fehlendes A1C-Ergebnis hat also einen signifikanten Einfluss auf die Wahrscheinlichkeit der Wiederaufnahme in die Kategorie <30 im Vergleich zu "NO".
+
+- **Das stimmt mit der Auswertung von Stark et al. überein" With respect to readmission and taken as a whole without adjusting for covariates, measurement of HbA1c was associated with a significantly reduced rate of readmission (9.4 versus 8.7%, 𝑃 = 0.007).
+
+
+## Binäre Logistische Regression mit Covariablen
+```{r log_regression, echo=TRUE, message=FALSE, warning=FALSE}
+# Zielvariable "readmitted" von drei auf zwei Ausprägungen reduzieren
+# Kopie des Datensatzes erstellen
+diabetes_data_reduced <- diabetes_data
+
+# In Zeichenkette umwandeln
+diabetes_data_reduced$readmitted <- as.character(diabetes_data_reduced$readmitted)
+
+# Alle anderen Werte zu "YES" umkodieren
+diabetes_data_reduced$readmitted[diabetes_data_reduced$readmitted != "NO"] <- "YES"
+
+# Zurück in einen Faktor umwandeln
+diabetes_data_reduced$readmitted <- factor(diabetes_data_reduced$readmitted, levels = c("NO", "YES"))
+
+# Einfache logistische Regression
+ logistic_model <- glm(readmitted ~ A1Cresult + diag_1_grouped + number_inpatient + race + gender + age, data = diabetes_data_reduced, family = binomial)
+ saveRDS(logistic_model, "logistic_model.rds")
+
+# Zusammenfassung des Modells anzeigen
+# logistic_model <- readRDS("logistic_model.rds")
+summary(logistic_model)
 
 
 
-## Decision tree
-```{r decision_tree, echo = TRUE}
+
+```
+
+**Interpretation**
+
+Intercept: -1.551643
+
+- Der Intercept ist signifikant (p < 0.001), was bedeutet, dass die Baseline-Odds (bei Referenzkategorie der Prädiktoren) für "YES" signifikant sind.
+Prädiktoren:
+
+A1Cresult:
+
+- A1CresultNorm: Ein Koeffizient von -0.091169 (p = 0.049087) zeigt einen signifikanten negativen Einfluss. Patienten mit normalen A1C-Werten haben eine geringere Wahrscheinlichkeit, wieder aufgenommen zu werden.
+- **Dieses Ergebnis weicht von der Publikation von Stark et al. ab!**
+
+diag_1_grouped
+
+- Diabetes: Ein Koeffizient von 0.137871 (p < 0.001) zeigt einen signifikanten positiven Einfluss. Patienten mit Diabetes als Hauptdiagnose haben eine höhere Wahrscheinlichkeit, wieder aufgenommen zu werden.
+- other: Ein Koeffizient von -0.166225 (p < 0.001) zeigt einen signifikanten negativen Einfluss.
+
+
+number_inpatient 
+
+- Ein Koeffizient von 0.430899 (p < 0.001) zeigt einen sehr signifikanten positiven Einfluss. Jede zusätzliche stationäre Aufnahme erhöht die Wahrscheinlichkeit der Wiederaufnahme signifikant.
+
+race:
+
+- Asian: Ein Koeffizient von -0.346613 (p < 0.001) zeigt einen signifikanten negativen Einfluss. Asiatische Patienten haben eine geringere Wahrscheinlichkeit, wieder aufgenommen zu werden.
+- Caucasian: Ein Koeffizient von 0.065736 (p < 0.001) zeigt einen signifikanten positiven Einfluss.
+- Hispanic: Ein Koeffizient von -0.124855 (p = 0.012297) zeigt einen signifikanten negativen Einfluss.
+- Other: Ein Koeffizient von -0.169173 (p = 0.003484) zeigt einen signifikanten negativen Einfluss.
+
+gender:
+
+- Male: Ein Koeffizient von -0.077953 (p < 0.001) zeigt einen signifikanten negativen Einfluss. Männer haben eine geringere Wahrscheinlichkeit, wieder aufgenommen zu werden.
+
+age:
+
+- Ältere Patienten haben eine höhere Wahrscheinlichkeit, wieder aufgenommen zu werden, im Vergleich zur Referenzgruppe.
+
+Modellgüte
+
+- Null deviance: 128977 (bei 93358 Freiheitsgraden)
+- Residual deviance: 123505 (bei 93336 Freiheitsgraden)
+- AIC: 123551
+
+Eine niedrigere Deviance und ein niedrigerer AIC-Wert deuten auf eine bessere Modellanpassung hin. Das Modell zeigt eine deutliche Verbesserung gegenüber dem Nullmodell.
+
+
+## Random Forest V1
+
+Die Analyse zielt darauf ab, ein prädiktives Modell zu entwickeln, um die Wahrscheinlichkeit der Wiederaufnahme von Patienten im Krankenhaus zu bestimmen. Dies wird erreicht, indem die wichtigsten Merkmale basierend auf dem Information Gain ausgewählt und ein Random Forest Modell trainiert wird. Die Analyse hilft dabei, relevante Faktoren zu identifizieren, die die Wiederaufnahme beeinflussen, und liefert ein Modell, das zur Verbesserung des Patientenmanagements und zur Reduzierung der Wiederaufnahmeraten genutzt werden kann. Durch die Aufteilung der Daten in Trainings- und Testdatensätze wird die Modellgüte objektiv bewertet, um die Generalisierbarkeit der Vorhersagen sicherzustellen.
+
+```{r random_forest_1, echo=TRUE, message=FALSE, warning=FALSE}
 # Wählen Sie die wichtigsten Merkmale basierend auf dem Information Gain aus
-top_features <- c("number_inpatient", "diag_1", "diag_2", "diag_3")
+top_features <- c(
+  "number_inpatient", "diag_1_grouped", "A1Cresult","race", "gender", "age")
 
-# Sicherstellen, dass die Zielvariable 'readmitted' als Faktor vorliegt
-diabetes_data$readmitted <- as.factor(diabetes_data$readmitted)
+#top_features <- c( "number_inpatient", "diag_1", "diag_2", "race", "gender", "age", 
+#  "admission_type_id", "discharge_disposition_id", "admission_source_id", 
+#  "time_in_hospital", "num_lab_procedures", "num_procedures", "num_medications", 
+#  "number_emergency", "number_diagnoses", "max_glu_serum", "A1Cresult", 
+#  "change", "diabetesMed"
+#)
 
-# Erstellen der Formel für den Entscheidungsbaum
-formula <- as.formula(paste("readmitted ~", paste(top_features, collapse = " + ")))
+# Erstellen eines Trainings- und Testdatensatzes
 
-# Erstellen des Entscheidungsbaum-Modells mit begrenzter Tiefe
-# tree_model <- rpart(formula, data = diabetes_data, method = "class",
-#                   control = rpart.control(maxdepth = 5, minsplit = 20, cp = 0.01))
+diabetes_data_reduced <- na.omit(diabetes_data_reduced)
+# Setzen eines Zufallsgenerators für Reproduzierbarkeit
+set.seed(42) 
 
-# Plotten der ersten paar Ebenen des Baums
-#plot(tree_model)
-#text(tree_model, use.n = TRUE, all = TRUE, cex = 0.7)
+# Aufteilen des Datensatzes in Trainings- und Testdaten
+inTrain <- createDataPartition(diabetes_data_reduced$readmitted, p=0.75, list=FALSE)
+
+training <- diabetes_data_reduced[inTrain, ]
+testing <- diabetes_data_reduced[-inTrain, ]
+
+# Überprüfen der Aufteilung
+table(training$readmitted)
+table(testing$readmitted)
+
+# Erstellen der Matrix der unabhängigen Variablen und des Zielvektors
+X_train <- training[, top_features]
+y_train <- training$readmitted
+X_test <- testing[, top_features]
+y_test <- testing$readmitted
+
+# Definieren der Trainingskontrolle
+trControl <- trainControl(method="cv", number=10)
+
+# Trainieren des Random Forest Modells
+#model_rf <- train(X_train, y_train, method="rf", preProcess=c("center","scale"), trControl=trControl, ntree=100)
+#saveRDS(model_rf, "model_rf.rds")
+
+model_rf <- readRDS("model_rf.rds")
+y_pred_2 <- predict(model_rf, X_test)
+confusionMatrix(y_pred_2, y_test)
 
 ```
 
-```{r regression, echo = TRUE}
+**Interpretation**
+
+Das trainierte Random Forest Modell wurde auf den Testdatensatz angewendet und erzielte eine Gesamtgenauigkeit (Accuracy) von 61.34%, mit einem Konfidenzintervall von 60.71% bis 61.96%. Die Sensitivität, die die Fähigkeit des Modells misst, tatsächliche positive Fälle (Nicht-Wiederaufnahmen, "NO") korrekt zu identifizieren, betrug 77.17%, während die Spezifität, die die Fähigkeit misst, tatsächliche negative Fälle (Wiederaufnahmen, "YES") korrekt zu identifizieren, bei 43.16% lag. Diese Ergebnisse zeigen, dass das Modell gut darin ist, Patienten zu identifizieren, die nicht wiederaufgenommen werden, hat jedoch Schwierigkeiten bei der korrekten Identifizierung von Patienten, die wiederaufgenommen werden. Die relativ niedrigen Werte für die Positiven und Negativen Vorhersagewerte (60.92% bzw. 62.22%) sowie der Kappa-Wert von 0.2074 deuten darauf hin, dass das Modell verbessert werden könnte. Insgesamt zeigt das Modell ein gewisses Potenzial, performt jedoch viel zu schlecht um klinisch nützlich zu sein. 
 
 
+## Random Forest V2
+
+Hilft es, wenn wir die Variable "diag_1" nicht gruppiert verwenden sondern in der ursprünglichen Version belassen? 
+
+```{r random_forest_2, echo=TRUE, message=FALSE, warning=FALSE}
+# Wählen Sie die wichtigsten Merkmale basierend auf dem Information Gain aus
+top_features <- c(
+  "number_inpatient", "diag_1", "A1Cresult")
+
+#top_features <- c( "number_inpatient", "diag_1", "diag_2", "race", "gender", "age", 
+#  "admission_type_id", "discharge_disposition_id", "admission_source_id", 
+#  "time_in_hospital", "num_lab_procedures", "num_procedures", "num_medications", 
+#  "number_emergency", "number_diagnoses", "max_glu_serum", "A1Cresult", 
+#  "change", "diabetesMed"
+#)
+
+# Erstellen eines Trainings- und Testdatensatzes
+
+diabetes_data_reduced <- na.omit(diabetes_data_reduced)
+# Setzen eines Zufallsgenerators für Reproduzierbarkeit
+set.seed(42) 
+
+# Aufteilen des Datensatzes in Trainings- und Testdaten
+inTrain <- createDataPartition(diabetes_data_reduced$readmitted, p=0.75, list=FALSE)
+
+training <- diabetes_data_reduced[inTrain, ]
+testing <- diabetes_data_reduced[-inTrain, ]
+
+# Überprüfen der Aufteilung
+table(training$readmitted)
+table(testing$readmitted)
+
+# Erstellen der Matrix der unabhängigen Variablen und des Zielvektors
+X_train <- training[, top_features]
+y_train <- training$readmitted
+X_test <- testing[, top_features]
+y_test <- testing$readmitted
+
+# Definieren der Trainingskontrolle
+trControl <- trainControl(method="cv", number=10)
+
+# Trainieren des Random Forest Modells
+# model_rf_2 <- train(X_train, y_train, method="rf", preProcess=c("center","scale"), trControl=trControl, ntree=100)
+#saveRDS(model_rf_2, "model_rf_2.rds")
+
+ model_rf_2 <- readRDS("model_rf_2.rds")
+
+y_pred <- predict(model_rf_2, X_test)
+confusionMatrix(y_pred, y_test)
 
 ```
 
-## Slide with Plot
+Das Ergebnis zeigt, dass die Vorhersagekraft kaum besser geworden ist. 
 
-```{r pressure}
-plot(pressure)
+# Fazit
+
+1. Der HbA1C Wert wird nur selten bestimmt <50%
+2. Die Vorhersagekraft des HbA1C Werts auf readmission ist sehr gering: Wenn ein erhöhter HbA1C Wert gemessen wird führt das zu einer etwa 4.18% höhere Chance der Wiederaufnahme in <30 Tagen. 
+3. Die Anzahl an bisherigen Aufenthalte ist die Variable mit der stärksten Vorhersagekraft: jede zusätzliche stationäre Aufnahme (number_inpatient) erhöht die Chance (Odds) der Wiederaufnahme um etwa 53.88%. 
+4. Ein Random-Forest Modell zur Vorhersage der Wiederaufnahme mit den gegebenen Variablen hat eine geringe Accuracy (ca. 0.6)
+
+## Unsupervised Learning
+
+Dies ist nur eine Spielwiese um Methoden des unsupervised Learnings auszuprobieren. 
+
+```{r Unsupervised, echo=TRUE, message=FALSE, warning=FALSE}
+
+# Alle nicht-numerischen Variablen aus dem Datensatz ausschließen
+scaled_diabetes_data <- diabetes_data[, sapply(diabetes_data, is.numeric)]
+
+# Ausschließen der Variablen encounter_id und diag_1_clean aus scaled_diabetes_data
+scaled_diabetes_data <- scaled_diabetes_data[, !(colnames(scaled_diabetes_data) %in% c("encounter_id", "diag_1_clean", "patient_nbr"))]
+
+# Zufällige Auswahl von 500 Zeilen aus dem Datensatz
+set.seed(123) # Für Reproduzierbarkeit
+scaled_diabetes_data <- scaled_diabetes_data[sample(nrow(scaled_diabetes_data), 100), ]
+
+# Applying z-transformation to all numerical columns in the dataset
+scaled_diabetes_data <- scale(scaled_diabetes_data)
+
+# Convert the scaled data to matrix format
+scaled_diabetes_data <- as.matrix(scaled_diabetes_data)
+
+# Initialize variables to store the results
+silhouette_scores <- numeric(4)
+k_values <- 2:5
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Iterate over k values from 2 to 5 to find the best k based on Silhouette score
+for (k in k_values) {
+  # Apply KMeans clustering
+  kmc <- kmeans(scaled_diabetes_data, centers = k)
+  
+  # Calculate the Silhouette coefficient
+  cl <- intCriteria(scaled_diabetes_data, kmc$cluster, "Silhouette")
+  
+  # Store the Silhouette score
+  silhouette_scores[k - 1] <- cl
+  
+  # Print the cluster centers to inspect them
+  print(paste("K =", k))
+  print(head(kmc$centers))
+}
+
+# Print all Silhouette scores for each k
+names(silhouette_scores) <- paste("k =", k_values)
+print(silhouette_scores)
+
+# Determine the best k based on the maximum Silhouette score
+optimal_k <- which.max(silhouette_scores) + 1  # Adjust index by 1
+cat("The optimal number of clusters (k) based on the Silhouette coefficient is:", optimal_k, "\n")
+
+ kmc <- kmeans(scaled_diabetes_data, centers = 2)
+ 
+ # Perform PCA on the scaled data
+pca_result <- princomp(scaled_diabetes_data)
+
+# Get PCA scores
+scores <- pca_result$scores[,1:2]
+scores <- scores*-1
+
+# Plot using qplot from ggplot2
+plot(scores[, "Comp.1"], scores[,"Comp.2"], col=kmc$cluster)
+text(scores[,"Comp.1"], scores[,"Comp.2"], labels=rownames(scaled_diabetes_data), cex=0.5)
+
+hcf <- hclust(dist(scaled_diabetes_data))
+  plot(hcf)
+  
+heatmap.2(scaled_diabetes_data, scale="none")
+
+ dbc <- dbscan(scaled_diabetes_data,eps=2, MinPts=3)
+  print(dbc)
+  
+ plot(scores[, "Comp.1"], scores[,"Comp.2"], col=dbc$cluster)
+  text(scores[,"Comp.1"], scores[,"Comp.2"], labels=rownames(scaled_diabetes_data), cex=0.5)
 ```
